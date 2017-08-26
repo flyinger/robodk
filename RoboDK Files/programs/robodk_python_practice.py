@@ -5,7 +5,6 @@
 from robolink import *    # API to communicate with RoboDK
 from robodk import *      # basic matrix operations
 import time
-#from random import randint
 import random
 RDK = Robolink()
 
@@ -61,9 +60,9 @@ def MakeRandomPoints(origin, numPoints, radius):
 
     for i in range(numPoints):
         scalar = random.randint(-radius,radius)
-        randNumX = random.random()
-        randNumY = random.random()
-        randNumZ = random.random()
+        randNumX = random.uniform(-1,1)
+        randNumY = random.uniform(-1,1)
+        randNumZ = random.uniform(-1,1)
         x = x0 + scalar * randNumX
         y = y0 + scalar * randNumY
         z = z0 + scalar * randNumZ
@@ -82,7 +81,36 @@ NUM_POINTS = 10
 start = RDK.Item('Start')
 appr = RDK.Item('Approach')
 entry = RDK.Item('Entry')
+mypose = RDK.Item('mypose')
+rearpose = RDK.Item('rearpose')
+x_pos_pose = RDK.Item('x_pos_pose')
+x_neg_pose = RDK.Item('x_neg_pose')
+y_pos_pose = RDK.Item('y_pos_pose')
+y_neg_pose = RDK.Item('y_neg_pose')
 robot = RDK.Item('UR5', ITEM_TYPE_ROBOT)
+test_points = RDK.Item('3d_pts_SW_output_mm')
+
+# Display points from import
+print('test_points = ' + str(test_points))
+test_point_list = test_points.GetPoints(FEATURE_POINT)
+test_point_array = test_point_list[0]
+print('test_points = ' + str(test_point_list[0]))
+pose_import = robot.Pose()
+print('robot start pose = ' + str(pose_import))
+pose_import.setPos(test_point_array[0])
+print('robot imported pose = ' + str(pose_import))
+xyz_list = []
+for i in range(len(test_point_array)):
+    print('test point %s = ' % i + str(test_point_array[i]))
+    point = test_point_array[i]
+    for j in range(len(point)):
+        x = point[0]
+        y = point[1]
+        z = point[2]
+        xyz = [x,y,z]
+    xyz_list.append(xyz)
+print('xyz_list = ' + str(xyz_list))
+
 
 # create list of interpolated points
 points = MakePoints(P_Start,P_End,NUM_POINTS)
@@ -100,7 +128,8 @@ print('pose_i = ' + str(pose_i))
 #target = P_Start # specify the point about which random points are to be generated
 target = points[NUM_POINTS-1] # specify the point about which random points are to be generated
 N = 10 # specify the number of random points to generate
-rand_points = MakeRandomPoints(target,N,300)
+radius = 200 # specify a bounding radius
+rand_points = MakeRandomPoints(target,N,radius)
 #P_Rand = [1,1,1]
 #P_Rand = [randint(-1,1)*x for x in P_Rand] # this is how to multiply a list by a scalar in python
 #print('P_Rand = ' + str(P_Rand))
@@ -108,12 +137,16 @@ print('rand_points = ' + str(rand_points))
 
 # move robot between points
 while True:
+    # move robot with targets created with robodk gui
     robot.MoveJ(start)
     robot.MoveJ(appr)
     robot.MoveJ(entry)
     robot.MoveJ(appr)
     robot.MoveJ(start)
     time.sleep(1)
+
+    # move robot with points generated programmatically in python
+    pose_ref = robot.Pose() # get the robot's current pose
     for i in range(NUM_POINTS):
         pose_i = pose_ref
         pose_i.setPos(points[i])
@@ -122,9 +155,55 @@ while True:
         pose_i = pose_ref
         pose_i.setPos(points[NUM_POINTS-i-1])
         robot.MoveJ(pose_i) 
-    #robot.MoveJ(pose_i)
     time.sleep(1)
+
+    # move robot with points randomly generated in python
+    rand_points = MakeRandomPoints(target,N,radius)
     for i in range(N):
         pose_i = pose_ref
         pose_i.setPos(rand_points[i])
         robot.MoveJ(pose_i)
+
+    # move robot through points with solidworks points
+    for i in range(len(test_point_array)):
+        chkpt = test_point_array[i]
+        print('chkpt %s / %s = ' % (i + 1, len(test_point_array)) + str(chkpt))
+        if chkpt[0] > 0:
+            # point exists in +x
+            robot.MoveJ(x_pos_pose)
+            pose_ref = robot.Pose()
+        if chkpt[0] < 0:
+            # point exists in -x
+            robot.MoveJ(rearpose)
+            pose_ref = robot.Pose()
+            
+        if chkpt[0] >0 and chkpt[1] > 0:
+            # point exists in +y
+            robot.MoveJ(mypose)
+            pose_ref = robot.Pose()
+            
+            '''
+        if chkpt[1] < 0:
+            # point exists in -y
+            robot.MoveJ(start)
+            pose_ref = robot.Pose()
+            '''
+        pose_i = pose_ref
+        pose_i.setPos(chkpt)
+        robot.MoveJ(pose_i)
+        '''
+        pose_i = pose_ref
+        pose_i.setPos(test_point_array[4])
+        robot.MoveJ(pose_i)
+        pose_i.setPos(test_point_array[5])
+        robot.MoveJ(pose_i)
+
+        
+        print('target_position (4x4) = ' + str(pose_i))
+        print('target_position (XYZRPW) = ' + str(pose_2_xyzrpw(pose_i)))
+        print('target_position (angles) = ' + str(pose_angle(pose_i)))
+        print('target_position (quaternion) = ' + str(pose_2_quaternion(pose_i)))
+        #print('target_position (UR Target) = ' + str(pose_2_UR(pose_i)))
+        '''
+
+        
